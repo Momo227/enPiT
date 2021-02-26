@@ -531,8 +531,17 @@ static void attackHandler() {
     else if(s_enemyType == ENEMY_TYPE_NORMAL){
       score = SCORE_OK;
     }
-    else{
+    else if(s_enemyType == ENEMY_TYPE_BOMB){
+      score = (-1)*SCORE_CLEAR;
+      DEBUG_LOG("[VIEWER] PLAYING >>> FINISHED");
+      s_currentTime = millis();
+      setState(MODE_VIEWER, STATE_FINISHED);
+    }
+    else if(s_enemyType == ENEMY_TYPE_SPECIAL){
       score = SCORE_SPECIAL;
+    }
+    else if(s_enemyType == ENEMY_TYPE_TIME){
+      s_startTime += 3000;
     }
   }
   else {
