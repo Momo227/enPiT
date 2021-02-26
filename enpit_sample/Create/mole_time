@@ -22,13 +22,13 @@ static SoftwareSerial softSerial(PIN_SW_RX, PIN_SW_TX);
 
 static char debug_time[16];
 #define DEBUG_LOG(x) \
-  do { \
-    unsigned long t = millis(); \
-    sprintf(debug_time, "%02ld:%02ld:%02ld.%03ld", t/1000/3600, t/1000%3600/60, t/1000%3600%60, t%1000); \
-    Serial.print(debug_time); \
-    Serial.print(": "); \
-    Serial.println(x); \
-  } while(0)
+do { \
+  unsigned long t = millis(); \
+  sprintf(debug_time, "%02ld:%02ld:%02ld.%03ld", t/1000/3600, t/1000%3600/60, t/1000%3600%60, t%1000); \
+  Serial.print(debug_time); \
+  Serial.print(": "); \
+  Serial.println(x); \
+} while(0)
 
 static int s_cycleMillis = 10;
 
@@ -71,14 +71,15 @@ static int s_state; // MODE + STATE
 #define SCORE_MISS      -1
 #define SCORE_KILL      -3
 #define SCORE_RARE      3
-#define SCORE_SPECI     10
+#define SCORE_SPECIAL     10
 #define SCORE_CLEAR     10
+#define SCORE_BOMB     100
 
 #define ENEMY_TYPE_NORMAL   0b01010100
 #define ENEMY_TYPE_DUMMY    0b01100010
 #define ENEMY_TYPE_RARE     0b00110111
 #define ENEMY_TYPE_SPECIAL  0b01111111
-#define ENEMY_TYPE_BOMB     0b01011100
+#define ENEMY_TYPE_BOMB     0b01111101
 #define ENEMY_TYPE_TIME     0b01101101
 
 static int s_displayIntervals[] = {
@@ -151,27 +152,27 @@ void setupLed() {
 }
 
 static void sendSerialCmd(int cmd) {
-#ifdef STANDALONE_MODE
+  #ifdef STANDALONE_MODE
   s_serialCmd = cmd;
-#else
+  #else
   TXSERIAL.write('0' + cmd);
-#endif
+  #endif
 }
 
 void readSerialCmd() {
-#ifndef STANDALONE_MODE
+  #ifndef STANDALONE_MODE
   String inString = "";
   if (int avail = RXSERIAL.available()) {
     while (avail--) {
       int c = RXSERIAL.read();
       if (c < 0)
-        break;
+      break;
       if (isDigit(c))
-        inString += (char)c;
+      inString += (char)c;
     }
     s_serialCmd = inString.toInt();
   }
-#endif
+  #endif
 }
 
 /*自機の状態を設定する*/
@@ -227,20 +228,20 @@ void setup() {
   setupPushSwitch();
 
   Serial.begin(9600);
-#ifdef _WAIT_SERIAL_READY
+  #ifdef _WAIT_SERIAL_READY
   while (!Serial);
-#endif
+  #endif
 
-#ifndef STANDALONE_MODE
+  #ifndef STANDALONE_MODE
   TXSERIAL.begin(SERIAL_SPEED);
-#endif
+  #endif
 
   sevenSeg.begin();
   sevenSeg.writeDisplay(); // clear
 
   buzzer.begin();
 
-//LED0を光らせる
+  //LED0を光らせる
   digitalWrite(PIN_LED0, HIGH);
   digitalWrite(PIN_LED1, LOW);
   digitalWrite(PIN_LED2, LOW);
@@ -249,13 +250,13 @@ void setup() {
 
 /*自機がコントローラ側だった場合の状態を遷移させる*/
 void controllerStateMachine() {
-//初期状態の場合相手側を初期状態にするための値を渡し、自分はプレイ開始状態になる
+  //初期状態の場合相手側を初期状態にするための値を渡し、自分はプレイ開始状態になる
   if (getState(MODE_CONTROLLER) == STATE_INIT) {
     DEBUG_LOG("[CNTROL] INIT -> STARTING");
     sendSerialCmd(GAME_CMD_INIT);
     setState(MODE_CONTROLLER, STATE_STARTING);
   }
-//プレイ開始状態で相手から開始の合図が入った際にプレイ中状態になる
+  //プレイ開始状態で相手から開始の合図が入った際にプレイ中状態になる
   if (getState(MODE_CONTROLLER) == STATE_STARTING) {
     if (s_serialCmd == GAME_CMD_START) {
       DEBUG_LOG("[CNTROL] STARTING >>> PLAYING");
@@ -263,8 +264,8 @@ void controllerStateMachine() {
       setState(MODE_CONTROLLER, STATE_PLAYING);
     }
   }
-//プレイ中の時にsw0と1どちらを押したかの情報を相手に渡す。
-//相手から終了の合図が渡ってくるとプレイ終了状態になる
+  //プレイ中の時にsw0と1どちらを押したかの情報を相手に渡す。
+  //相手から終了の合図が渡ってくるとプレイ終了状態になる
   if (getState(MODE_CONTROLLER) == STATE_PLAYING) {
     if (s_changedSW0 && s_stateSW0 == HIGH) {
       sendSerialCmd(GAME_CMD_RIGHT);
@@ -279,7 +280,7 @@ void controllerStateMachine() {
     }
   }
 
- //プレイ終了状態の時初期状態にする
+  //プレイ終了状態の時初期状態にする
   if (getState(MODE_CONTROLLER) == STATE_FINISHED) {
     DEBUG_LOG("[CNTROL] PLAYING >>> INIT");
     reset();
@@ -289,7 +290,7 @@ void controllerStateMachine() {
 /*カウントダウン関数*/
 #define COUNTDOWN_CNT 3
 static boolean countdown() {
-//カウントダウンの音の設定 3回鳴らす
+  //カウントダウンの音の設定 3回鳴らす
   const Buzzer::note_t note_count[] = {
     { NOTE_A4, NOTE_QUARTER   },//NOTE_A4の音を250ms鳴らす
     { 0,       NOTE_QUARTER   },//無音で750msブザーを使用している状態になる
@@ -307,12 +308,12 @@ static boolean countdown() {
     { NOTE_A5, NOTE_WHOLE     },
     #endif
   };
-//開始直前お音の設定。カウントダウン後に鳴らす
+  //開始直前お音の設定。カウントダウン後に鳴らす
   const Buzzer::note_t note_start[] = {
     { NOTE_A5, NOTE_WHOLE     },//NOTE_A5の音を1000ms鳴らす
   };
   static int count = 0;
-//7segLEDの周囲を順々に光らせるためのパターン
+  //7segLEDの周囲を順々に光らせるためのパターン
   const struct {
     enum seven_segment_pos pos;
     uint8_t bitmask;
@@ -333,7 +334,7 @@ static boolean countdown() {
   static int index = 0;
   static unsigned long lastMsec = 0;
 
-//ブザー音の配列を選択し音を鳴らす。4回目に開始直前の音を鳴らし、それが終わるとプレイ開始に遷移するためにtureを返す
+  //ブザー音の配列を選択し音を鳴らす。4回目に開始直前の音を鳴らし、それが終わるとプレイ開始に遷移するためにtureを返す
   if (!buzzer.playing()) {
     if (count < COUNTDOWN_CNT) {
       buzzer.write(note_count, ARRAY_NUM(note_count));
@@ -358,7 +359,7 @@ static boolean countdown() {
     }
     buzzer.output();
   }
-//カウントダウン完了後、"Go"と表示する
+  //カウントダウン完了後、"Go"と表示する
   if (count >= COUNTDOWN_CNT) {
     index = 0;
     sevenSeg.clear();
@@ -368,7 +369,7 @@ static boolean countdown() {
     return false;
   }
 
-//カウントダウン中はsegLEDの周囲を60msごとに順々に光らせる
+  //カウントダウン中はsegLEDの周囲を60msごとに順々に光らせる
   sevenSeg.clear();
   sevenSeg.writeDigitRaw(pattern[index].pos, pattern[index].bitmask);
   sevenSeg.writeDisplay();
@@ -400,12 +401,44 @@ static void toneAnswer(int score) {
     { NOTE_D7, NOTE_EIGHTH },
     { NOTE_G7, NOTE_EIGHTH },
   };
+  Buzzer::note_t notesTime[] = {
+    { NOTE_F5, NOTE_EIGHTH },
+    { NOTE_F5, NOTE_EIGHTH },
+    { NOTE_F5, NOTE_EIGHTH },
+    { NOTE_F5, NOTE_EIGHTH },
+    { NOTE_F5, NOTE_EIGHTH },
+    { NOTE_DS5, NOTE_EIGHTH },
+    { NOTE_F5, NOTE_EIGHTH },
+  };
+  Buzzer::note_t notesSpecial[] = {
+    { NOTE_E6, NOTE_EIGHTH },
+    { NOTE_E6, NOTE_EIGHTH },
+    { NOTE_A6, NOTE_EIGHTH },
+    { NOTE_C7, NOTE_EIGHTH },
+    { NOTE_E7, NOTE_EIGHTH },
+  };
+  Buzzer::note_t notesBomb[] = {
+    { NOTE_DS4, NOTE_EIGHTH },
+    { NOTE_AS4, NOTE_EIGHTH },
+    { NOTE_DS4, NOTE_EIGHTH },
+    { NOTE_AS4, NOTE_EIGHTH },
+    { NOTE_DS4, NOTE_EIGHTH },
+  };
 
-  if (score > 1) {
+  if (9 > score && score > 1) {
     buzzer.write(notesRare, ARRAY_NUM(notesRare));
+  }
+  else if (score > 9) {
+    buzzer.write(notesSpecial, ARRAY_NUM(notesSpecial));
   }
   else if (score > 0) {
     buzzer.write(notesOK, ARRAY_NUM(notesOK));
+  }
+  else if (score == 0) {
+    buzzer.write(notesTime, ARRAY_NUM(notesTime));
+  }
+  else if (score < 0) {
+    buzzer.write(notesBomb, ARRAY_NUM(notesBomb));
   }
   else {
     buzzer.write(notesNG, ARRAY_NUM(notesNG));
@@ -517,7 +550,7 @@ static void attackHandler() {
   //攻撃がきちんとヒットした時
   else if (s_serialCmd == hitCmd[s_enemyPos]) {
     if (s_enemyType == ENEMY_TYPE_RARE) {
-    //レアモグラの時は1回目で通常のモグラに変化する
+      //レアモグラの時は1回目で通常のモグラに変化する
       if (sevenSeg.readDigitRaw(s_enemyPos) == ENEMY_TYPE_RARE) {
         sevenSeg.clear();
         sevenSeg.writeDigitRaw(s_enemyPos, ENEMY_TYPE_NORMAL);
@@ -532,7 +565,7 @@ static void attackHandler() {
       score = SCORE_OK;
     }
     else if(s_enemyType == ENEMY_TYPE_BOMB){
-      score = (-1)*SCORE_CLEAR;
+      score = (-1)*SCORE_BOMB;
       DEBUG_LOG("[VIEWER] PLAYING >>> FINISHED");
       s_currentTime = millis();
       setState(MODE_VIEWER, STATE_FINISHED);
@@ -560,7 +593,7 @@ static void attackHandler() {
 /*自機が表示側の際に状態を遷移させる*/
 static void viewerStateMachine() {
   static boolean playFinished = false;
-//初期状態の時3秒間現在のレベルを表示しその後プレイ開始状態になる
+  //初期状態の時3秒間現在のレベルを表示しその後プレイ開始状態になる
   if (getState(MODE_VIEWER) == STATE_INIT) {
     if (millis() - s_currentTime >= 3000) {
       DEBUG_LOG("[VIEWER] INIT >>> STARTING");
@@ -572,7 +605,7 @@ static void viewerStateMachine() {
     sevenSeg.writeDisplay();
     playFinished = false;
   }
-//プレイ開始状態の時、カウントダウンを行い、完了後相手に開始の合図を送り、プレイ開始状態になる
+  //プレイ開始状態の時、カウントダウンを行い、完了後相手に開始の合図を送り、プレイ開始状態になる
   if (getState(MODE_VIEWER) == STATE_STARTING) {
     if (countdown()) {
       DEBUG_LOG("[VIEWER] STARTING >>> PLAYING");
@@ -584,9 +617,9 @@ static void viewerStateMachine() {
       setState(MODE_VIEWER, STATE_PLAYING);
     }
   }
-//プレイ中状態の時
+  //プレイ中状態の時
   if (getState(MODE_VIEWER) == STATE_PLAYING) {
-  //モグラの攻撃判定
+    //モグラの攻撃判定
     attackHandler();
     //一定時間経過で相手に終了の合図を送り、プレイ終了状態になる
     if (millis() - s_startTime >= PLAY_DURATION) {
@@ -596,7 +629,7 @@ static void viewerStateMachine() {
     }
     //モグラの表示間隔がレベルごとの時間を超えた場合
     else if (millis() - s_currentTime >= s_displayIntervals[s_level]) {
-    //プレイ開始直後でない場合にスイッチを叩かなかった場合の判定
+      //プレイ開始直後でない場合にスイッチを叩かなかった場合の判定
       if (s_displaying) {
         if (s_enemyType != ENEMY_TYPE_DUMMY) {
           s_score += SCORE_MISS;
@@ -612,9 +645,9 @@ static void viewerStateMachine() {
       s_currentTime = millis();
     }
   }
-//プレイ終了状態の時
+  //プレイ終了状態の時
   if (getState(MODE_VIEWER) == STATE_FINISHED) {
-  //3秒間"UP"と表示する
+    //3秒間"UP"と表示する
     if (millis() - s_currentTime <= 3000) {
       s_displaying = false;
       sevenSeg.clear();
@@ -633,7 +666,7 @@ static void viewerStateMachine() {
       }
     }
     else {
-    //スコアが閾値未満かレベルが最大の時、リセットし、そうでない場合はレベルを1上げて勝機状態にする
+      //スコアが閾値未満かレベルが最大の時、リセットし、そうでない場合はレベルを1上げて勝機状態にする
       boolean next = false;
       if (s_score < SCORE_CLEAR) {
         ;
@@ -661,12 +694,12 @@ void loop() {
   readPushSwitch();
   readSerialCmd();
 
-//自機がコントローラ側の場合
+  //自機がコントローラ側の場合
   if (s_state & MODE_CONTROLLER) {
     controllerStateMachine();
   }
 
-//自機が表示側の場合
+  //自機が表示側の場合
   if (s_state & MODE_VIEWER) {
     viewerStateMachine();
   }
@@ -679,7 +712,7 @@ void loop() {
     s_serialCmd = GAME_CMD_NONE;
   }
 
-//自機がまだ表示側でもコントローラ側でもないときに、sw0が押されるとコントローラ側になる
+  //自機がまだ表示側でもコントローラ側でもないときに、sw0が押されるとコントローラ側になる
   if (!(s_state & (MODE_CONTROLLER | MODE_VIEWER))) {
     if (s_changedSW0 && s_stateSW0 == LOW) {
       DEBUG_LOG("CONTROLLER mode Start");
@@ -693,21 +726,21 @@ void loop() {
     case GAME_CMD_INIT:
     case GAME_CMD_START:
     case GAME_CMD_FINISH:
-      break;
+    break;
     case GAME_CMD_LEFT:
     case GAME_CMD_RIGHT:
-      DEBUG_LOG("ignore LEFT/RIGHT command");
-      s_serialCmd = GAME_CMD_NONE;
-      break;
+    DEBUG_LOG("ignore LEFT/RIGHT command");
+    s_serialCmd = GAME_CMD_NONE;
+    break;
     case GAME_CMD_RESET:
-      DEBUG_LOG(">>> RESET");
-      reset();
-      s_serialCmd = GAME_CMD_NONE;
-      break;
+    DEBUG_LOG(">>> RESET");
+    reset();
+    s_serialCmd = GAME_CMD_NONE;
+    break;
     default:
-      DEBUG_LOG("ignore Unknown command");
-      s_serialCmd = GAME_CMD_NONE;
-      break;
+    DEBUG_LOG("ignore Unknown command");
+    s_serialCmd = GAME_CMD_NONE;
+    break;
   }
 
   delay(s_cycleMillis);
